@@ -28,15 +28,15 @@ const Settings: LayoutSettings & {
 } = {
   navTheme: 'light',
   // 拂晓蓝
-  primaryColor: '#1890ff',
+  primaryColor: '#2f374c',
   layout: 'mix',
   contentWidth: 'Fluid',
   fixedHeader: false,
   fixSiderbar: true,
   colorWeak: false,
-  title: 'Dinky Real-time Platform ',
+  title: 'KSO 实时计算平台 ',
   pwa: false,
-  logo: 'dinky.svg',
+  logo: 'kylin.png',
   iconfontUrl: '',
   menu: {
     locale: true

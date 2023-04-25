@@ -26,20 +26,20 @@ export default () => {
 
   return (
     <DefaultFooter
-      copyright={l('app.copyright.produced', 'Produced by Dinky Community')}
+      copyright={l('app.copyright.produced', 'Kyligence StreamOps')}
       links={[
         {
-          key: 'Dinky',
-          title: 'Dinky',
+          key: 'Kyligence StreamOps',
+          title: 'Kyligence StreamOps',
           href: '',
           blankTarget: true,
         },
-        {
-          key: 'github',
-          title: <GithubOutlined/>,
-          href: 'https://github.com/DataLinkDC/dlink',
-          blankTarget: true,
-        },
+        // {
+        //   key: 'github',
+        //   title: <GithubOutlined/>,
+        //   href: 'https://github.com/DataLinkDC/dlink',
+        //   blankTarget: true,
+        // },
       ]}
     />
   );

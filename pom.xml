@@ -61,6 +61,7 @@
         <scala.version>2.12.10</scala.version>
         <!--  `provided` for product environment ,`compile` for dev environment  -->
         <scope.runtime>provided</scope.runtime>
+        <!--        <scope.runtime>provided</scope.runtime>-->
         <dlink.flink.version>1.14</dlink.flink.version>
         <spring-boot-dependencies.version>2.6.13</spring-boot-dependencies.version>
         <hutool.version>5.8.4</hutool.version>
@@ -767,7 +768,7 @@
             </activation>
             <properties>
                 <!--  `provided` for product environment ,`compile` for dev environment  -->
-                <scope.runtime>compile</scope.runtime>
+                <scope.runtime>provided</scope.runtime>
             </properties>
         </profile>
 

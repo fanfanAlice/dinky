@@ -259,7 +259,7 @@ const Model: ModelType = {
     current: undefined,
     sql: '',
     // monaco: {},
-    currentPath: ['Guide Page'],
+    currentPath: ['引导页'],
     tabs: {
       activeKey: 0,
       panes: [],
@@ -411,7 +411,7 @@ const Model: ModelType = {
           ...state,
           current: undefined,
           tabs: payload,
-          currentPath: ['Guide Page'],
+          currentPath: ['引导页'],
         };
       }
       return {
@@ -647,7 +647,7 @@ const Model: ModelType = {
           ...state,
           current: undefined,
           tabs: {...newTabs},
-          currentPath: ['Guide Page'],
+          currentPath: ['引导页'],
         };
       }
       return {

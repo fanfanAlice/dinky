@@ -54,7 +54,6 @@ const GlobalHeaderRight: React.FC = () => {
       {/*    <Tag color={ENVTagColor[REACT_APP_ENV]}>{REACT_APP_ENV}</Tag>*/}
       {/*  </span>*/}
       {/*)}*/}
-      <SelectLang icon={<GlobalOutlined/>} className={styles.action}/>
     </Space>
   );
 };

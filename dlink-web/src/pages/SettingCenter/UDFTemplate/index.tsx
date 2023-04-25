@@ -24,7 +24,7 @@ import {UDFTemplateItem} from "@/pages/SettingCenter/UDFTemplate/data";
 import {addTemplate, deleteTemplate, getTemplate} from "@/pages/SettingCenter/UDFTemplate/service";
 import {Button, Col, Drawer, Form, Input, Modal, Row, Select, Space} from "antd";
 import {DeleteOutlined, FormOutlined, PlusOutlined} from "@ant-design/icons";
-import 'antd/dist/antd.css';
+// import 'antd/dist/antd.css';
 import './index.css';
 import CodeEdit from "@/components/Common/CodeEdit";
 import {l} from "@/utils/intl";

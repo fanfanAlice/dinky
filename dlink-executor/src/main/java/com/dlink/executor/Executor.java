@@ -266,10 +266,21 @@ public abstract class Executor {
 
     private void loginFromKeytabIfNeed() {
         setConfig.forEach((k, v) -> log.debug("setConfig key: [{}], value: [{}]", k, v));
-        String krb5ConfPath = (String) setConfig.getOrDefault("java.security.krb5.conf", "");
-        String keytabPath = (String) setConfig.getOrDefault("security.kerberos.login.keytab", "");
-        String principal = (String) setConfig.getOrDefault("security.kerberos.login.principal", "");
-
+        Map<String, String> sysEnvSet = System.getenv();
+        String krb5ConfPath = sysEnvSet.containsKey("KRB5_CONF")
+                ? System.getenv("KRB5_CONF")
+                : (String) setConfig.getOrDefault("java.security.krb5.conf", "");
+        String keytabPath = sysEnvSet.containsKey("KERBEROS_KEYTAB")
+                ? System.getenv("KERBEROS_KEYTAB")
+                : (String) setConfig.getOrDefault("security.kerberos.login.keytab", "");
+        String principal = sysEnvSet.containsKey("KERBEROS_PRINCIPAL")
+                ? System.getenv("KERBEROS_PRINCIPAL")
+                : (String) setConfig.getOrDefault("security.kerberos.login.principal", "");
+        log.info("=====================");
+        log.info("krb5ConfPath: " + krb5ConfPath);
+        log.info("keytabPath: " + keytabPath);
+        log.info("principal: " + principal);
+        log.info("=====================");
         if (Asserts.isAllNullString(krb5ConfPath, keytabPath, principal)) {
             log.info("Simple authentication mode");
             return;

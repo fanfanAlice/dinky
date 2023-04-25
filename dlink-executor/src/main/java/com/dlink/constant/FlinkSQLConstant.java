@@ -30,7 +30,7 @@ public interface FlinkSQLConstant {
     /**
      * 分隔符
      */
-    String SEPARATOR = ";\n";
+    String SEPARATOR = ";";
     /**
      * DDL 类型
      */

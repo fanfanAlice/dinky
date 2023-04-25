@@ -7,15 +7,15 @@
   "background_color": "#001529",
   "icons": [
     {
-      "src": "dinky.svg",
+      "src": "kylin.png",
       "sizes": "192x192"
     },
     {
-      "src": "dinky.svg",
+      "src": "kylin.png",
       "sizes": "128x128"
     },
     {
-      "src": "dinky.svg",
+      "src": "kylin.png",
       "sizes": "512x512"
     }
   ]

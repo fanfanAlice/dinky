@@ -197,7 +197,7 @@ const FlinkSqlEditor = (props:any) => {
         value={code}
         options={options}
         onChange={onChangeHandle}
-        theme="vs-dark"
+        theme="vs"
         editorDidMount={editorDidMountHandle}
       />
       <StudioExplain

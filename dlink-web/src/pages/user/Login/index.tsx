@@ -168,20 +168,11 @@ const Login: React.FC = () => {
 
   return (
     <div className={styles.container}>
-      <div className={styles.lang}>{SelectLang && <SelectLang onItemClick={(e) => {
-        let language = e.key.toString()
-        if (language === undefined || language === "") {
-          language = localStorage.getItem("umi_locale")
-        }
-        cookies.set('language', language, {path: '/'})
-        setLocale(language)
-      }}/>}</div>
       <div className={styles.content}>
         <div className={styles.top}>
           <div className={styles.header}>
             <Link to="/">
-              <img alt="logo" className={styles.logo} src="/dinky.svg"/>
-              <span className={styles.title}>Dinky</span>
+              <img alt="logo" className={styles.logo} src="/kylin1.png"/>
             </Link>
           </div>
           <div className={styles.desc}>

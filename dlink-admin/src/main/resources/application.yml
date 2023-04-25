@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:mysql://${MYSQL_ADDR:127.0.0.1:3306}/${MYSQL_DATABASE:dlink}?useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&useSSL=false&zeroDateTimeBehavior=convertToNull&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: ${MYSQL_USERNAME:dlink}
-    password: ${MYSQL_PASSWORD:dlink}
+    url: jdbc:mysql://solution-11:3306/kso7?useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&useSSL=false&zeroDateTimeBehavior=convertToNull&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: dlink
+    password: dlink@123
     driver-class-name: com.mysql.cj.jdbc.Driver
   application:
     name: dlink
@@ -55,7 +55,7 @@ spring:
       max-request-size: 524288000
       enabled: true
 server:
-  port: 8888
+  port: 8890
 
 mybatis-plus:
   mapper-locations: classpath:/mapper/*Mapper.xml
@@ -91,15 +91,15 @@ knife4j:
 
 dinky:
   dolphinscheduler:
-    enabled: false
+    enabled: true
     # dolphinscheduler 地址
-    url: http://127.0.0.1:5173/dolphinscheduler
+    url: http://10.1.3.11:12345/dolphinscheduler
     # dolphinscheduler 生成的token
-    token: ad54eb8f57fadea95f52763517978b26
+    token: 606737db6388e2ef0cf706d84582cec0
     # dolphinscheduler 中指定的项目名不区分大小写
-    project-name: Dinky
+    project-name: kso
     # Dolphinscheduler DinkyTask Address
-    address: http://127.0.0.1:8888
+    address: http://10.1.3.12:8890
 
   # python udf 需要用到的 python 执行环境
   python:

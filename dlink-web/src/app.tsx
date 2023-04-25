@@ -54,7 +54,7 @@ export async function getInitialState(): Promise<{
         password: result.datas.user.password,
         nickname: result.datas.user.nickname,
         worknum: result.datas.user.worknum,
-        avatar: result.datas.user.avatar ? result.datas.user.avatar : '/icons/user_avatar.png',
+        avatar: result.datas.user.avatar ? result.datas.user.avatar : 'kylin3.png',
         mobile: result.datas.user.mobile,
         enabled: result.datas.user.enabled,
         isDelete: result.datas.user.isDelete,
@@ -159,14 +159,7 @@ export const layout: RunTimeLayoutConfig = ({initialState}) => {
     },
     links: isDev
       ? [
-        <Link to="/umi/plugin/openapi" target="_blank">
-          <LinkOutlined/>
-          <span>OpenAPI Document</span>
-        </Link>,
-        <Link to="/~docs">
-          <BookOutlined/>
-          <span>Business Component Document</span>
-        </Link>,
+       
       ]
       : [],
     menuHeaderRender: undefined,

@@ -229,12 +229,6 @@ export default [
     ],
   },
   {
-    path: '/about',
-    name: 'about',
-    icon: 'smile',
-    component: './Welcome',
-  },
-  {
     component: './404',
   },
 ];
