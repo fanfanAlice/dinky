@@ -104,6 +104,10 @@ restart() {
   echo "........................................Restart Successfully........................................"
 }
 
+runTool() {
+    java -Ddruid.mysql.usePingMethod=false -Xms512M -Xmx2048M -XX:PermSize=512M -XX:MaxPermSize=1024M -XX:+HeapDumpOnOutOfMemoryError -Xverify:none -cp ${CLASS_PATH} "$@"
+    exit $?
+}
 # 根据输入参数执行对应方法，不输入则执行tips提示方法
 case "$1" in
 "start")
@@ -117,6 +121,9 @@ case "$1" in
   ;;
 "restart")
   restart
+  ;;
+"io.kyligence."*)
+  runTool "$@"
   ;;
 *)
   tips

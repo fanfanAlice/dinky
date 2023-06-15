@@ -34,6 +34,13 @@
             </includes>
         </fileSet>
         <fileSet>
+            <directory>${project.parent.basedir}/dlink-doc/plugins</directory>
+            <outputDirectory>plugins/</outputDirectory>
+            <includes>
+                <include>*.jar</include>
+            </includes>
+        </fileSet>
+        <fileSet>
             <directory>${project.parent.basedir}/dlink-admin/target/classes</directory>
             <outputDirectory>config</outputDirectory>
             <includes>

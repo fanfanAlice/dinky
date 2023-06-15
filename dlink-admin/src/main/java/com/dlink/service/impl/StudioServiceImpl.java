@@ -65,12 +65,18 @@ import com.dlink.session.SessionConfig;
 import com.dlink.session.SessionInfo;
 import com.dlink.session.SessionPool;
 import com.dlink.sql.FlinkQuery;
+import com.dlink.utils.EncryptUtil;
+import com.dlink.utils.KSOConfig;
 import com.dlink.utils.RunTimeUtil;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -174,9 +180,33 @@ public class StudioServiceImpl implements StudioService {
         }
     }
 
+    private String decryptPassword(String statement) {
+        ProcessEntity process = ProcessContextHolder.getProcess();
+        try {
+            String flinkEncryptKey = Arrays.stream(KSOConfig.getKSOFlinkEncryptKey(fragmentVariableService))
+                    .collect(Collectors.joining("|"));
+            Pattern flinkEncryptKeyPattern = Pattern.compile("'(" + flinkEncryptKey + ")'\\s*=\\s*'(?<value>.*)'");
+            Matcher matcher = flinkEncryptKeyPattern.matcher(statement);
+            while (matcher.find()) {
+                String value = matcher.group("value");
+                String password = EncryptUtil.getDecryptedValue(value.replace("'", ""));
+                if (password == null) {
+                    process.error("decryptPassword decrypted is null :" + value);
+                } else {
+                    statement = statement.replace("'" + value + "'", "'" + password + "'");
+                }
+            }
+        } catch (Exception e) {
+            process.error("decryptPassword error :" + e.getMessage());
+            logger.error("decryptPassword error ", e);
+        }
+        return statement;
+    }
+
     private JobResult executeFlinkSql(StudioExecuteDTO studioExecuteDTO) {
         ProcessEntity process = ProcessContextHolder.registerProcess(
                 ProcessEntity.init(ProcessType.FLINKEXECUTE, StpUtil.getLoginIdAsInt()));
+        studioExecuteDTO.setStatement(decryptPassword(studioExecuteDTO.getStatement()));
         addFlinkSQLEnv(studioExecuteDTO);
         process.info("Initializing Flink job config...");
         JobConfig config = studioExecuteDTO.getJobConfig();

@@ -130,7 +130,7 @@ const DataBaseForm: React.FC<ClickHouseFormProps> = (props) => {
           name="password"
           label={l('pages.rc.db.password')}
         >
-          <Input.Password/>
+          {values.id ?<Input type="password"/> : <Input.Password/>}
         </Form.Item>
         {type !== "Hive" && type !== "Presto" &&
           <>
