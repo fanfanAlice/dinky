@@ -31,8 +31,10 @@ import com.dlink.job.JobResult;
 import com.dlink.result.APIJobResult;
 import com.dlink.result.ExplainResult;
 import com.dlink.service.APIService;
+import com.dlink.service.FragmentVariableService;
 import com.dlink.utils.RunTimeUtil;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -48,10 +50,15 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 @Service
 public class APIServiceImpl implements APIService {
 
+    @Autowired
+    private FragmentVariableService fragmentVariableService;
+
     @Override
     public APIJobResult executeSql(APIExecuteSqlDTO apiExecuteSqlDTO) {
         JobConfig config = apiExecuteSqlDTO.getJobConfig();
         JobManager jobManager = JobManager.build(config);
+        apiExecuteSqlDTO.setStatement(
+                StudioServiceImpl.decryptPassword(apiExecuteSqlDTO.getStatement(), fragmentVariableService));
         JobResult jobResult = jobManager.executeSql(apiExecuteSqlDTO.getStatement());
         APIJobResult apiJobResult = APIJobResult.build(jobResult);
         RunTimeUtil.recovery(jobManager);
@@ -106,7 +113,8 @@ public class APIServiceImpl implements APIService {
     public SavePointResult savepoint(APISavePointDTO apiSavePointDTO) {
         JobConfig jobConfig = apiSavePointDTO.getJobConfig();
         JobManager jobManager = JobManager.build(jobConfig);
-        SavePointResult savepoint = jobManager.savepoint(apiSavePointDTO.getJobId(), apiSavePointDTO.getSavePointType(), apiSavePointDTO.getSavePoint());
+        SavePointResult savepoint = jobManager.savepoint(apiSavePointDTO.getJobId(), apiSavePointDTO.getSavePointType(),
+                apiSavePointDTO.getSavePoint());
         RunTimeUtil.recovery(jobManager);
         return savepoint;
     }
