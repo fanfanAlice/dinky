@@ -241,6 +241,7 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
         JobManager jobManager = JobManager.build(config);
         process.start();
         if (!config.isJarTask()) {
+            task.setStatement(StudioServiceImpl.decryptPassword(task.getStatement(), fragmentVariableService));
             JobResult jobResult = jobManager.executeSql(task.getStatement());
             process.finish("Submit Flink SQL succeed.");
             return jobResult;
@@ -287,6 +288,7 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
         JobConfig config = buildJobConfig(task);
         JobManager jobManager = JobManager.build(config);
         if (!config.isJarTask()) {
+            task.setStatement(StudioServiceImpl.decryptPassword(task.getStatement(), fragmentVariableService));
             return jobManager.executeSql(task.getStatement());
         } else {
             return jobManager.executeJar();
@@ -314,6 +316,7 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
         JobConfig config = buildJobConfig(task);
         JobManager jobManager = JobManager.build(config);
         if (!config.isJarTask()) {
+            task.setStatement(StudioServiceImpl.decryptPassword(task.getStatement(), fragmentVariableService));
             return jobManager.executeSql(task.getStatement());
         } else {
             return jobManager.executeJar();
@@ -338,6 +341,7 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
                 return result;
             }
             Driver driver = Driver.build(dataBase.getDriverConfig());
+            sqlDTO.setStatement(StudioServiceImpl.decryptPassword(sqlDTO.getStatement(), fragmentVariableService));
             JdbcSelectResult selectResult = driver.executeSql(sqlDTO.getStatement(), sqlDTO.getMaxRowNum());
             driver.close();
             result.setResult(selectResult);

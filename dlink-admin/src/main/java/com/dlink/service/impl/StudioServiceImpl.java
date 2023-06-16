@@ -180,7 +180,7 @@ public class StudioServiceImpl implements StudioService {
         }
     }
 
-    private String decryptPassword(String statement) {
+    public static String decryptPassword(String statement, FragmentVariableService fragmentVariableService) {
         ProcessEntity process = ProcessContextHolder.getProcess();
         try {
             String flinkEncryptKey = Arrays.stream(KSOConfig.getKSOFlinkEncryptKey(fragmentVariableService))
@@ -206,7 +206,7 @@ public class StudioServiceImpl implements StudioService {
     private JobResult executeFlinkSql(StudioExecuteDTO studioExecuteDTO) {
         ProcessEntity process = ProcessContextHolder.registerProcess(
                 ProcessEntity.init(ProcessType.FLINKEXECUTE, StpUtil.getLoginIdAsInt()));
-        studioExecuteDTO.setStatement(decryptPassword(studioExecuteDTO.getStatement()));
+        studioExecuteDTO.setStatement(decryptPassword(studioExecuteDTO.getStatement(), fragmentVariableService));
         addFlinkSQLEnv(studioExecuteDTO);
         process.info("Initializing Flink job config...");
         JobConfig config = studioExecuteDTO.getJobConfig();
@@ -254,6 +254,7 @@ public class StudioServiceImpl implements StudioService {
         try (Driver driver = Driver.build(dataBase.getDriverConfig())) {
             process.infoSuccess();
             process.start();
+            sqlDTO.setStatement(StudioServiceImpl.decryptPassword(sqlDTO.getStatement(), fragmentVariableService));
             selectResult = driver.executeSql(sqlDTO.getStatement(), sqlDTO.getMaxRowNum());
         }
         process.finish("Execute sql succeed.");

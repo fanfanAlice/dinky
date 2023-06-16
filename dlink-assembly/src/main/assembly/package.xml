@@ -35,7 +35,7 @@
         </fileSet>
         <fileSet>
             <directory>${project.parent.basedir}/dlink-doc/plugins</directory>
-            <outputDirectory>plugins/</outputDirectory>
+            <outputDirectory>plugins</outputDirectory>
             <includes>
                 <include>*.jar</include>
             </includes>
