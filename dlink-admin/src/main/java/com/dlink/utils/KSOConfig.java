@@ -19,20 +19,20 @@
 
 package com.dlink.utils;
 
+import static com.dlink.utils.KSOUtil.KSO_FLINK_ENCRYPT_KEY;
+
 import com.dlink.service.FragmentVariableService;
 
 import java.util.Map;
 
 public class KSOConfig {
 
-    public static final String KSO_FLINK_ENCRYPT_KEY = "kso.flink.encrypt-key";
-
     public static Map<String, String> getEnabledVariables(FragmentVariableService fragmentVariableService) {
         return fragmentVariableService.listEnabledVariables();
     }
 
-    public static String[] getKSOFlinkEncryptKey(FragmentVariableService service) {
+    public static String getKSOFlinkEncryptKey(FragmentVariableService service) {
         String encryptKey = getEnabledVariables(service).getOrDefault(KSO_FLINK_ENCRYPT_KEY, "password");
-        return encryptKey.split(",");
+        return encryptKey;
     }
 }

@@ -65,18 +65,14 @@ import com.dlink.session.SessionConfig;
 import com.dlink.session.SessionInfo;
 import com.dlink.session.SessionPool;
 import com.dlink.sql.FlinkQuery;
-import com.dlink.utils.EncryptUtil;
 import com.dlink.utils.KSOConfig;
+import com.dlink.utils.KSOUtil;
 import com.dlink.utils.RunTimeUtil;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -183,19 +179,8 @@ public class StudioServiceImpl implements StudioService {
     public static String decryptPassword(String statement, FragmentVariableService fragmentVariableService) {
         ProcessEntity process = ProcessContextHolder.getProcess();
         try {
-            String flinkEncryptKey = Arrays.stream(KSOConfig.getKSOFlinkEncryptKey(fragmentVariableService))
-                    .collect(Collectors.joining("|"));
-            Pattern flinkEncryptKeyPattern = Pattern.compile("'(" + flinkEncryptKey + ")'\\s*=\\s*'(?<value>.*)'");
-            Matcher matcher = flinkEncryptKeyPattern.matcher(statement);
-            while (matcher.find()) {
-                String value = matcher.group("value");
-                String password = EncryptUtil.getDecryptedValue(value.replace("'", ""));
-                if (password == null) {
-                    process.error("decryptPassword decrypted is null :" + value);
-                } else {
-                    statement = statement.replace("'" + value + "'", "'" + password + "'");
-                }
-            }
+            String flinkEncryptKey = KSOConfig.getKSOFlinkEncryptKey(fragmentVariableService);
+            statement = KSOUtil.getDecryptedValue(statement, flinkEncryptKey);
         } catch (Exception e) {
             process.error("decryptPassword error :" + e.getMessage());
             logger.error("decryptPassword error ", e);

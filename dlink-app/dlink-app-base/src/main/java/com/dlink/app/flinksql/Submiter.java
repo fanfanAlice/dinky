@@ -28,6 +28,7 @@ import com.dlink.executor.ExecutorSetting;
 import com.dlink.interceptor.FlinkInterceptor;
 import com.dlink.parser.SqlType;
 import com.dlink.trans.Operations;
+import com.dlink.utils.KSOUtil;
 import com.dlink.utils.SqlUtil;
 import com.dlink.utils.ZipUtils;
 
@@ -92,8 +93,22 @@ public class Submiter {
         String statement = "";
         try {
             statement = DBUtil.getOneByID(getQuerySQL(id), config);
+            String fragmentValue = getFragmentSQLStatement(KSOUtil.KSO_FLINK_ENCRYPT_KEY, config);
+            statement = KSOUtil.getDecryptedValue(statement, fragmentValue);
         } catch (IOException | SQLException e) {
             logger.error("{} --> 获取 FlinkSQL 配置异常，ID 为 {}, 连接信息为：{} ,异常信息为：{} ", LocalDateTime.now(), id,
+                    config.toString(), e.getMessage(), e);
+        }
+        return statement;
+    }
+
+    private static String getFragmentSQLStatement(String key, DBConfig config) {
+        String statement = "select fragment_value from dlink_fragment where enabled = 1 and name = '" + key + "'";
+        try {
+            statement = DBUtil.getOneByID(statement, config);
+        } catch (IOException | SQLException e) {
+            logger.error("{} --> get fragment_value config error，name 为 {}, 连接信息为：{} ,异常信息为：{} ", LocalDateTime.now(),
+                    key,
                     config.toString(), e.getMessage(), e);
         }
         return statement;
