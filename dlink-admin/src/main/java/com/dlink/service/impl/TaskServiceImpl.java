@@ -136,6 +136,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.alibaba.druid.filter.config.ConfigTools;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -143,6 +144,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.common.base.Strings;
 
 import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.bean.BeanUtil;
@@ -152,6 +154,7 @@ import cn.hutool.core.lang.tree.Tree;
 import cn.hutool.core.lang.tree.TreeNode;
 import cn.hutool.core.lang.tree.TreeUtil;
 import cn.hutool.core.util.StrUtil;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * 任务 服务实现类
@@ -159,6 +162,7 @@ import cn.hutool.core.util.StrUtil;
  * @author wenmo
  * @since 2021-05-24
  */
+@Slf4j
 @Service
 public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implements TaskService {
 
@@ -203,6 +207,8 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
     private String password;
     @Value("${server.port}")
     private String serverPort;
+    @Value("${spring.datasource.public-key:}")
+    private String publicKey;
 
     @Autowired
     private UDFService udfService;
@@ -213,7 +219,19 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
 
     private String buildParas(Integer id, String dinkyAddr) {
         return "--id " + id + " --driver " + driver + " --url " + url + " --username " + username + " --password "
-                + password + " --dinkyAddr " + dinkyAddr;
+                + decryptByPublicKey(password, publicKey) + " --dinkyAddr " + dinkyAddr;
+    }
+
+    public static String decryptByPublicKey(String encryptedPassword, String publicKey) {
+        if (Strings.isNullOrEmpty(publicKey)) {
+            return encryptedPassword;
+        }
+        try {
+            return ConfigTools.decrypt(publicKey, encryptedPassword);
+        } catch (Exception e) {
+            log.error("decrypt By public-key(spring-boot) error", e);
+        }
+        return encryptedPassword;
     }
 
     @Override

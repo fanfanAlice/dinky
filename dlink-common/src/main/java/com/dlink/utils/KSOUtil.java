@@ -22,11 +22,17 @@ package com.dlink.utils;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.google.common.base.Strings;
+
 public class KSOUtil {
 
     public static final String KSO_FLINK_ENCRYPT_KEY = "kso.flink.encrypt-key";
+    public static final String KSO_DEFAULT_ENCRYPT_KEY = "password";
 
     public static String getDecryptedValue(String statement, String flinkEncryptKey) {
+        if (Strings.isNullOrEmpty(statement)) {
+            return statement;
+        }
         flinkEncryptKey = String.join("|", flinkEncryptKey.split(","));
         Pattern flinkEncryptKeyPattern = Pattern.compile("'(" + flinkEncryptKey + ")'\\s*=\\s*'(?<value>.*)'");
         Matcher matcher = flinkEncryptKeyPattern.matcher(statement);

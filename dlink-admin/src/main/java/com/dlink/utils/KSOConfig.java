@@ -19,6 +19,7 @@
 
 package com.dlink.utils;
 
+import static com.dlink.utils.KSOUtil.KSO_DEFAULT_ENCRYPT_KEY;
 import static com.dlink.utils.KSOUtil.KSO_FLINK_ENCRYPT_KEY;
 
 import com.dlink.service.FragmentVariableService;
@@ -32,7 +33,7 @@ public class KSOConfig {
     }
 
     public static String getKSOFlinkEncryptKey(FragmentVariableService service) {
-        String encryptKey = getEnabledVariables(service).getOrDefault(KSO_FLINK_ENCRYPT_KEY, "password");
+        String encryptKey = getEnabledVariables(service).getOrDefault(KSO_FLINK_ENCRYPT_KEY, KSO_DEFAULT_ENCRYPT_KEY);
         return encryptKey;
     }
 }

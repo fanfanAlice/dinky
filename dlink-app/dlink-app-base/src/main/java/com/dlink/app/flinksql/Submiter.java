@@ -19,6 +19,8 @@
 
 package com.dlink.app.flinksql;
 
+import static com.dlink.utils.KSOUtil.KSO_DEFAULT_ENCRYPT_KEY;
+
 import com.dlink.app.db.DBConfig;
 import com.dlink.app.db.DBUtil;
 import com.dlink.assertion.Asserts;
@@ -94,6 +96,9 @@ public class Submiter {
         try {
             statement = DBUtil.getOneByID(getQuerySQL(id), config);
             String fragmentValue = getFragmentSQLStatement(KSOUtil.KSO_FLINK_ENCRYPT_KEY, config);
+            logger.info(
+                    "select statement from dlink_task_statement where id = {}, fragmentValue --> {} ,statement --> {}",
+                    id, fragmentValue, statement);
             statement = KSOUtil.getDecryptedValue(statement, fragmentValue);
         } catch (IOException | SQLException e) {
             logger.error("{} --> 获取 FlinkSQL 配置异常，ID 为 {}, 连接信息为：{} ,异常信息为：{} ", LocalDateTime.now(), id,
@@ -110,6 +115,9 @@ public class Submiter {
             logger.error("{} --> get fragment_value config error，name 为 {}, 连接信息为：{} ,异常信息为：{} ", LocalDateTime.now(),
                     key,
                     config.toString(), e.getMessage(), e);
+        }
+        if (statement == null) {
+            statement = KSO_DEFAULT_ENCRYPT_KEY;
         }
         return statement;
     }
