@@ -245,7 +245,7 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
         ProcessEntity process = null;
         if (StpUtil.isLogin()) {
             process = ProcessContextHolder.registerProcess(
-                    ProcessEntity.init(ProcessType.FLINKSUBMIT, StpUtil.getLoginIdAsInt()));
+                    ProcessEntity.init(ProcessType.FLINKSUBMIT, id, StpUtil.getLoginIdAsInt()));
         } else {
             process = ProcessEntity.NULL_PROCESS;
         }

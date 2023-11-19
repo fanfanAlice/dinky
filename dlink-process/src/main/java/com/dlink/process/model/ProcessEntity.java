@@ -80,6 +80,10 @@ public class ProcessEntity {
         return init(type.getValue() + "_TEMP", null, type, userId);
     }
 
+    public static ProcessEntity init(ProcessType type, Integer taskId, Integer userId) {
+        return init(type.getValue() + "_TEMP", taskId, type, userId);
+    }
+
     public static ProcessEntity init(Integer taskId, ProcessType type, Integer userId) {
         return init(type.getValue() + taskId, taskId, type, userId);
     }
