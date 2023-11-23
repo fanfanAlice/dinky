@@ -35,6 +35,7 @@ import com.dlink.model.JobInstance;
 import com.dlink.model.JobInstanceCount;
 import com.dlink.model.JobInstanceStatus;
 import com.dlink.model.JobStatus;
+import com.dlink.model.JobStatusInfo;
 import com.dlink.service.ClusterConfigurationService;
 import com.dlink.service.ClusterService;
 import com.dlink.service.HistoryService;
@@ -44,6 +45,7 @@ import com.dlink.utils.JSONUtil;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -234,6 +236,26 @@ public class JobInstanceServiceImpl extends SuperServiceImpl<JobInstanceMapper, 
         Integer tenantId = baseMapper.getTenantByJobInstanceId(id);
         Asserts.checkNull(tenantId, Tips.JOB_INSTANCE_NOT_EXIST);
         TenantContextHolder.set(tenantId);
+    }
+
+    @Override
+    public List<JobStatusInfo> getJobStatusInfo(String status, boolean history) {
+        List<JobInstance> list = baseMapper.getAll(status, history);
+        FlinkJobTaskPool pool = FlinkJobTaskPool.getInstance();
+        return list.stream().map(t -> convert(t, pool)).collect(Collectors.toList());
+    }
+
+    private JobStatusInfo convert(JobInstance jobInstance, FlinkJobTaskPool pool) {
+        JobStatusInfo jobStatusInfo = new JobStatusInfo();
+        jobStatusInfo.setId(jobInstance.getId());
+        jobStatusInfo.setName(jobInstance.getName());
+        if (pool.exist(jobInstance.getId().toString())) {
+            jobStatusInfo.setStatus(pool.get(jobInstance.getId().toString()).getInstance().getStatus());
+        } else {
+            jobStatusInfo.setStatus(jobInstance.getStatus());
+        }
+        jobStatusInfo.setJid(jobInstance.getJid());
+        return jobStatusInfo;
     }
 
 }

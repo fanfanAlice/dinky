@@ -9,6 +9,23 @@
         limit 1
     </select>
 
+    <select id="getAll" resultType="com.dlink.model.JobInstance">
+        select a.id, a.name, a.status, a.jid
+        from dlink_job_instance a
+        <if test='!(isHistory!=null and isHistory==true)'>
+            inner join (
+            select max(ji.id) as id from dlink_job_instance ji
+            group by ji.task_id
+            ) snap on snap.id = a.id
+        </if>
+        <where>
+        1=1
+        <if test='status!=null and status!=""'>
+            and a.status = #{status}
+        </if>
+        </where>
+    </select>
+
     <select id="selectForProTable" resultType="com.dlink.model.JobInstance">
         select
         a.*,

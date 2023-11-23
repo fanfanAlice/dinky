@@ -25,6 +25,7 @@ import com.dlink.explainer.lineage.LineageResult;
 import com.dlink.model.JobInfoDetail;
 import com.dlink.model.JobInstance;
 import com.dlink.model.JobInstanceStatus;
+import com.dlink.model.JobStatusInfo;
 
 import java.util.List;
 
@@ -57,4 +58,6 @@ public interface JobInstanceService extends ISuperService<JobInstance> {
     ProTableResult<JobInstance> listJobInstances(JsonNode para);
 
     void initTenantByJobInstanceId(Integer id);
+
+    List<JobStatusInfo> getJobStatusInfo(String status, boolean history);
 }

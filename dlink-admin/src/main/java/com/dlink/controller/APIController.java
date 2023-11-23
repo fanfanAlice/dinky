@@ -177,6 +177,15 @@ public class APIController {
     }
 
     /**
+     * 获取所有job的信息
+     */
+    @GetMapping("/jobs")
+    public Result<?> jobs(@RequestParam(value = "status", required = false) String status,
+                          @RequestParam(value = "history", required = false, defaultValue = "false") boolean history) {
+        return Result.succeed(jobInstanceService.getJobStatusInfo(status, history), "succeeded");
+    }
+
+    /**
      * 通过 taskId 获取 Task 对应的 Job 实例的信息
      */
     @GetMapping("/getJobInstanceByTaskId")

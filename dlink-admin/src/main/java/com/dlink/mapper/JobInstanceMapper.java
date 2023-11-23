@@ -53,4 +53,7 @@ public interface JobInstanceMapper extends SuperMapper<JobInstance> {
 
     @InterceptorIgnore(tenantLine = "true")
     Integer getTenantByJobInstanceId(@Param("id") Integer id);
+
+    @InterceptorIgnore(tenantLine = "true")
+    List<JobInstance> getAll(@Param("status") String status, @Param("isHistory") boolean history);
 }
