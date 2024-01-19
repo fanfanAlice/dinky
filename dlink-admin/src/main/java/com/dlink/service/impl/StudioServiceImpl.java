@@ -49,6 +49,7 @@ import com.dlink.model.Task;
 import com.dlink.process.context.ProcessContextHolder;
 import com.dlink.process.model.ProcessEntity;
 import com.dlink.process.model.ProcessType;
+import com.dlink.process.pool.ProcessPool;
 import com.dlink.result.DDLResult;
 import com.dlink.result.IResult;
 import com.dlink.result.SelectResult;
@@ -190,17 +191,23 @@ public class StudioServiceImpl implements StudioService {
 
     private JobResult executeFlinkSql(StudioExecuteDTO studioExecuteDTO) {
         ProcessEntity process = ProcessContextHolder.registerProcess(
-                ProcessEntity.init(ProcessType.FLINKEXECUTE, StpUtil.getLoginIdAsInt()));
-        studioExecuteDTO.setStatement(decryptPassword(studioExecuteDTO.getStatement(), fragmentVariableService));
-        addFlinkSQLEnv(studioExecuteDTO);
-        process.info("Initializing Flink job config...");
-        JobConfig config = studioExecuteDTO.getJobConfig();
-        buildSession(config);
-        JobManager jobManager = JobManager.build(config);
-        process.start();
-        JobResult jobResult = jobManager.executeSql(studioExecuteDTO.getStatement());
-        process.finish("Execute Flink SQL succeed.");
-        RunTimeUtil.recovery(jobManager);
+                ProcessEntity.init(ProcessType.FLINKEXECUTE, studioExecuteDTO.getTaskId(), StpUtil.getLoginIdAsInt()));
+        JobResult jobResult;
+        try {
+            studioExecuteDTO.setStatement(decryptPassword(studioExecuteDTO.getStatement(), fragmentVariableService));
+            addFlinkSQLEnv(studioExecuteDTO);
+            process.info("Initializing Flink job config...");
+            JobConfig config = studioExecuteDTO.getJobConfig();
+            buildSession(config);
+            JobManager jobManager = JobManager.build(config);
+            process.start();
+            jobResult = jobManager.executeSql(studioExecuteDTO.getStatement());
+            process.finish("Execute Flink SQL succeed.");
+            RunTimeUtil.recovery(jobManager);
+        } catch (Exception e) {
+            ProcessPool.getInstance().remove(process.getName());
+            throw e;
+        }
         return jobResult;
     }
 
@@ -218,39 +225,44 @@ public class StudioServiceImpl implements StudioService {
         ProcessEntity process = ProcessContextHolder.registerProcess(
                 ProcessEntity.init(ProcessType.SQLEXECUTE, StpUtil.getLoginIdAsInt()));
         JobResult result = new JobResult();
-        result.setStatement(sqlDTO.getStatement());
-        result.setStartTimeNow();
-        process.info("Initializing database connection...");
-        if (Asserts.isNull(sqlDTO.getDatabaseId())) {
-            result.setSuccess(false);
-            result.setError("请指定数据源");
+        try {
+            result.setStatement(sqlDTO.getStatement());
+            result.setStartTimeNow();
+            process.info("Initializing database connection...");
+            if (Asserts.isNull(sqlDTO.getDatabaseId())) {
+                result.setSuccess(false);
+                result.setError("请指定数据源");
+                result.setEndTimeNow();
+                return result;
+            }
+            DataBase dataBase = dataBaseService.getById(sqlDTO.getDatabaseId());
+            if (Asserts.isNull(dataBase)) {
+                process.error("The database does not exist.");
+                result.setSuccess(false);
+                result.setError("The database does not exist.");
+                result.setEndTimeNow();
+                return result;
+            }
+            JdbcSelectResult selectResult;
+            try (Driver driver = Driver.build(dataBase.getDriverConfig())) {
+                process.infoSuccess();
+                process.start();
+                sqlDTO.setStatement(StudioServiceImpl.decryptPassword(sqlDTO.getStatement(), fragmentVariableService));
+                selectResult = driver.executeSql(sqlDTO.getStatement(), sqlDTO.getMaxRowNum());
+            }
+            process.finish("Execute sql succeed.");
+            result.setResult(selectResult);
+            if (selectResult.isSuccess()) {
+                result.setSuccess(true);
+            } else {
+                result.setSuccess(false);
+                result.setError(selectResult.getError());
+            }
             result.setEndTimeNow();
-            return result;
+        } catch (Exception e) {
+            ProcessPool.getInstance().remove(process.getName());
+            throw e;
         }
-        DataBase dataBase = dataBaseService.getById(sqlDTO.getDatabaseId());
-        if (Asserts.isNull(dataBase)) {
-            process.error("The database does not exist.");
-            result.setSuccess(false);
-            result.setError("The database does not exist.");
-            result.setEndTimeNow();
-            return result;
-        }
-        JdbcSelectResult selectResult;
-        try (Driver driver = Driver.build(dataBase.getDriverConfig())) {
-            process.infoSuccess();
-            process.start();
-            sqlDTO.setStatement(StudioServiceImpl.decryptPassword(sqlDTO.getStatement(), fragmentVariableService));
-            selectResult = driver.executeSql(sqlDTO.getStatement(), sqlDTO.getMaxRowNum());
-        }
-        process.finish("Execute sql succeed.");
-        result.setResult(selectResult);
-        if (selectResult.isSuccess()) {
-            result.setSuccess(true);
-        } else {
-            result.setSuccess(false);
-            result.setError(selectResult.getError());
-        }
-        result.setEndTimeNow();
         return result;
     }
 

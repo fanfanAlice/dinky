@@ -19,6 +19,8 @@
 
 package com.dlink.process.context;
 
+import static com.dlink.process.model.ProcessType.isFLinkRun;
+
 import com.dlink.assertion.Asserts;
 import com.dlink.exception.RunTimeException;
 import com.dlink.process.model.ProcessEntity;
@@ -59,7 +61,9 @@ public class ProcessContextHolder {
 
     private static void checkDuplicate(ProcessEntity process) {
         ProcessEntity processEntity = ProcessPool.getInstance().get(process.getName());
-        if (processEntity != null && processEntity.isActiveProcess()) {
+        // 两次都是提交flink
+        if (processEntity != null && isFLinkRun(process.getType())
+                && isFLinkRun(processEntity.getType()) && processEntity.isActiveProcess()) {
             process.error("作业已经提交,请勿重复提交");
             throw new RunTimeException("作业已经提交,请勿重复提交");
         }

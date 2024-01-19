@@ -84,6 +84,7 @@ import com.dlink.model.UDFTemplate;
 import com.dlink.process.context.ProcessContextHolder;
 import com.dlink.process.model.ProcessEntity;
 import com.dlink.process.model.ProcessType;
+import com.dlink.process.pool.ProcessPool;
 import com.dlink.result.SqlExplainResult;
 import com.dlink.result.TaskOperatingResult;
 import com.dlink.service.AlertGroupService;
@@ -250,23 +251,28 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
             process = ProcessEntity.NULL_PROCESS;
         }
         process.info("Initializing Flink job config...");
-        JobConfig config = buildJobConfig(task);
-
-        if (GatewayType.KUBERNETES_APPLICATION.equalsValue(config.getType())) {
-            loadDocker(id, config.getClusterConfigurationId(), config.getGatewayConfig());
-        }
-
-        JobManager jobManager = JobManager.build(config);
-        process.start();
-        if (!config.isJarTask()) {
-            task.setStatement(StudioServiceImpl.decryptPassword(task.getStatement(), fragmentVariableService));
-            JobResult jobResult = jobManager.executeSql(task.getStatement());
-            process.finish("Submit Flink SQL succeed.");
-            return jobResult;
-        } else {
-            JobResult jobResult = jobManager.executeJar();
-            process.finish("Submit Flink Jar succeed.");
-            return jobResult;
+        JobConfig config;
+        JobManager jobManager;
+        try {
+            config = buildJobConfig(task);
+            jobManager = JobManager.build(config);
+            if (GatewayType.KUBERNETES_APPLICATION.equalsValue(config.getType())) {
+                loadDocker(id, config.getClusterConfigurationId(), config.getGatewayConfig());
+            }
+            process.start();
+            if (!config.isJarTask()) {
+                task.setStatement(StudioServiceImpl.decryptPassword(task.getStatement(), fragmentVariableService));
+                JobResult jobResult = jobManager.executeSql(task.getStatement());
+                process.finish("Submit Flink SQL succeed.");
+                return jobResult;
+            } else {
+                JobResult jobResult = jobManager.executeJar();
+                process.finish("Submit Flink Jar succeed.");
+                return jobResult;
+            }
+        } catch (Exception e) {
+            ProcessPool.getInstance().remove(process.getName());
+            throw e;
         }
     }
 
