@@ -19,6 +19,17 @@
 
 package com.dlink.service.impl;
 
+import cn.dev33.satoken.stp.StpUtil;
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.convert.Convert;
+import cn.hutool.core.lang.tree.Tree;
+import cn.hutool.core.lang.tree.TreeNode;
+import cn.hutool.core.lang.tree.TreeUtil;
+import cn.hutool.core.util.StrUtil;
+import com.alibaba.druid.filter.config.ConfigTools;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.dlink.alert.Alert;
 import com.dlink.alert.AlertConfig;
 import com.dlink.alert.AlertMsg;
@@ -107,16 +118,35 @@ import com.dlink.service.UDFTemplateService;
 import com.dlink.utils.DockerClientUtils;
 import com.dlink.utils.JSONUtil;
 import com.dlink.utils.UDFUtils;
-
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.common.base.Strings;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.apache.hadoop.yarn.logaggregation.ContainerLogsRequest;
+import org.apache.hadoop.yarn.logaggregation.LogCLIHelpers;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
+import javax.annotation.Resource;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.net.InetAddress;
+import java.net.URI;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.time.Instant;
@@ -125,37 +155,12 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
-
-import javax.annotation.Resource;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
-
-import com.alibaba.druid.filter.config.ConfigTools;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.google.common.base.Strings;
-
-import cn.dev33.satoken.stp.StpUtil;
-import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.convert.Convert;
-import cn.hutool.core.lang.tree.Tree;
-import cn.hutool.core.lang.tree.TreeNode;
-import cn.hutool.core.lang.tree.TreeUtil;
-import cn.hutool.core.util.StrUtil;
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * 任务 服务实现类
@@ -210,6 +215,10 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
     private String serverPort;
     @Value("${spring.datasource.public-key:}")
     private String publicKey;
+    @Value("${kso.output.yarn.logs.dir:/tmp/kso/logs}")
+    private String outputLogs;
+    @Value("${kso.output.hadoop.user:root}")
+    private String appOwner;
 
     @Autowired
     private UDFService udfService;
@@ -1009,6 +1018,7 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
             if (checkStatus.isDone()) {
                 jobInfoDetail.getInstance().setStatus(checkStatus.getValue());
                 jobInstanceService.updateById(jobInfoDetail.getInstance());
+                outPutLogs(jobInfoDetail.getInstance());
                 return jobInfoDetail.getInstance();
             }
         }
@@ -1030,6 +1040,7 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
                 && !status.equals(jobInfoDetail.getInstance().getStatus())) {
             jobStatusChanged = true;
             jobInfoDetail.getInstance().setFinishTime(LocalDateTime.now());
+            outPutLogs(jobInfoDetail.getInstance());
         }
         if (isCoercive) {
             DaemonFactory.addTask(DaemonTaskConfig.build(FlinkJobTask.TYPE, jobInfoDetail.getInstance().getId()));
@@ -1406,7 +1417,7 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
 
     @Override
     public Result<List<Task>> queryOnLineTaskByDoneStatus(List<JobLifeCycle> jobLifeCycle, List<JobStatus> jobStatuses,
-            boolean includeNull, Integer catalogueId) {
+                                                          boolean includeNull, Integer catalogueId) {
         final Tree<Integer> node = ((Tree<Integer>) queryAllCatalogue().getDatas())
                 .getNode(Objects.isNull(catalogueId) ? 0 : catalogueId);
         final List<Integer> parentIds = new ArrayList<>(0);
@@ -1417,7 +1428,7 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
     }
 
     private List<Task> getTasks(List<JobLifeCycle> jobLifeCycle, List<JobStatus> jobStatuses, boolean includeNull,
-            List<Integer> parentIds) {
+                                List<Integer> parentIds) {
         return this.baseMapper.queryOnLineTaskByDoneStatus(parentIds,
                 jobLifeCycle.stream().filter(Objects::nonNull).map(JobLifeCycle::getValue).collect(Collectors.toList()),
                 includeNull, jobStatuses.stream().map(JobStatus::name).collect(Collectors.toList()));
@@ -1457,7 +1468,7 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
     }
 
     private void findTheConditionSavePointToOnline(TaskOperatingResult taskOperatingResult,
-            JobInstance jobInstanceByTaskId) {
+                                                   JobInstance jobInstanceByTaskId) {
         final JobHistory jobHistory = jobHistoryService.getJobHistory(jobInstanceByTaskId.getId());
         if (jobHistory != null && StringUtils.isNotBlank(jobHistory.getCheckpointsJson())) {
             final ObjectNode jsonNodes = JSONUtil.parseObject(jobHistory.getCheckpointsJson());
@@ -1498,5 +1509,53 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
         taskOperatingResult.setStatus(TaskOperatingStatus.OPERATING);
         final Result result = offLineTask(taskOperatingResult.getTask().getId(), SavePointType.CANCEL.getValue());
         taskOperatingResult.parseResult(result);
+    }
+
+    public void outPutLogs(JobInstance jobInstance) {
+        try {
+            Cluster cluster = clusterService.getById(jobInstance.getClusterId());
+            String type = cluster.getType();
+            if (!type.equalsIgnoreCase(GatewayType.YARN_APPLICATION.getLongValue())) {
+                return;
+            }
+            String name = cluster.getName();
+            ApplicationId applicationId = ApplicationId.fromString(name);
+            String dir = outputLogs + "/" + applicationId.toString();
+            Path path = Paths.get(dir);
+            boolean directoryExists = Files.exists(path);
+            if (directoryExists) {
+                log.info("The log for this task has been output, Please check {}", dir);
+                return;
+            }
+            ContainerLogsRequest request = new ContainerLogsRequest();
+            request.setAppId(applicationId);
+            log.info("out put log dir {}", dir);
+            request.setAppOwner(appOwner);
+            request.setOutputLocalDir(dir);
+            Set<String> logs = new HashSet<>();
+            request.setLogTypes(logs);
+            request.setBytes(Long.MAX_VALUE);
+
+            YarnConfiguration yarnConfiguration = new YarnConfiguration();
+
+            GatewayConfig config = GatewayConfig.build(clusterConfigurationService.getClusterConfigById(cluster.getClusterConfigurationId()).getConfig());
+            String yarnConfigPath = config.getClusterConfig().getYarnConfigPath();
+            yarnConfiguration
+                    .addResource(new org.apache.hadoop.fs.Path(URI.create(yarnConfigPath + "/yarn-site.xml")));
+            yarnConfiguration
+                    .addResource(new org.apache.hadoop.fs.Path(URI.create(yarnConfigPath + "/core-site.xml")));
+            yarnConfiguration
+                    .addResource(new org.apache.hadoop.fs.Path(URI.create(yarnConfigPath + "/hdfs-site.xml")));
+            LogCLIHelpers logCLIHelpers = new LogCLIHelpers();
+            logCLIHelpers.setConf(yarnConfiguration);
+            int i = logCLIHelpers.dumpAllContainersLogs(request);
+            if (i == 0) {
+                log.info("{} out put log success.", name);
+            } else {
+                log.info("{} out put log fail.", name);
+            }
+        } catch (Exception e) {
+            log.info(e.getMessage(), e);
+        }
     }
 }
