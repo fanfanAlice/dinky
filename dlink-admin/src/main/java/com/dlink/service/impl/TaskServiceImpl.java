@@ -128,25 +128,25 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
-import org.apache.hadoop.yarn.conf.YarnConfiguration;
-import org.apache.hadoop.yarn.logaggregation.ContainerLogsRequest;
-import org.apache.hadoop.yarn.logaggregation.LogCLIHelpers;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.annotation.PreDestroy;
 import javax.annotation.Resource;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.net.InetAddress;
-import java.net.URI;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.time.Instant;
@@ -155,11 +155,12 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -217,19 +218,22 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
     private String publicKey;
     @Value("${kso.output.yarn.logs.dir:/tmp/kso/logs}")
     private String outputLogs;
-    @Value("${kso.output.hadoop.user:root}")
-    private String appOwner;
+    @Value("${kso.output.retry.num:5}")
+    private Integer retryNum;
+    @Value("${kso.output.retry.wait.seconds:10}")
+    private Integer waitTime;
 
     @Autowired
     private UDFService udfService;
+
+    private static final ExecutorService executorService = Executors.newFixedThreadPool(10);
 
     private String buildParas(Integer id) {
         return buildParas(id, StrUtil.NULL);
     }
 
     private String buildParas(Integer id, String dinkyAddr) {
-        return "--id " + id + " --driver " + driver + " --url " + url + " --username " + username + " --password "
-                + decryptByPublicKey(password, publicKey) + " --dinkyAddr " + dinkyAddr;
+        return "--id " + id + " --driver " + driver + " --url " + url + " --username " + username + " --password " + decryptByPublicKey(password, publicKey) + " --dinkyAddr " + dinkyAddr;
     }
 
     public static String decryptByPublicKey(String encryptedPassword, String publicKey) {
@@ -336,8 +340,7 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
             savepointJobInstance(task.getJobInstanceId(), SavePointType.CANCEL.getValue());
         }
         if (Dialect.notFlinkSql(task.getDialect())) {
-            return executeCommonSql(SqlDTO.build(task.getStatement(),
-                    task.getDatabaseId(), null));
+            return executeCommonSql(SqlDTO.build(task.getStatement(), task.getDatabaseId(), null));
         }
         if (StringUtils.isBlank(savePointPath)) {
             task.setSavePointStrategy(SavePointStrategy.LATEST.getValue());
@@ -1018,6 +1021,7 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
             if (checkStatus.isDone()) {
                 jobInfoDetail.getInstance().setStatus(checkStatus.getValue());
                 jobInstanceService.updateById(jobInfoDetail.getInstance());
+                executorService.submit(() -> outPutLogs(jobInfoDetail.getInstance()));
                 outPutLogs(jobInfoDetail.getInstance());
                 return jobInfoDetail.getInstance();
             }
@@ -1040,7 +1044,10 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
                 && !status.equals(jobInfoDetail.getInstance().getStatus())) {
             jobStatusChanged = true;
             jobInfoDetail.getInstance().setFinishTime(LocalDateTime.now());
-            outPutLogs(jobInfoDetail.getInstance());
+            checkStatus = checkJobStatus(jobInfoDetail);
+            if (checkStatus.isDone()) {
+                executorService.submit(() -> outPutLogs(jobInfoDetail.getInstance()));
+            }
         }
         if (isCoercive) {
             DaemonFactory.addTask(DaemonTaskConfig.build(FlinkJobTask.TYPE, jobInfoDetail.getInstance().getId()));
@@ -1050,6 +1057,77 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
         }
         pool.refresh(jobInfoDetail);
         return jobInfoDetail.getInstance();
+    }
+
+    private void outPutLogs(JobInstance jobInstance) {
+        try {
+            Cluster cluster = clusterService.getById(jobInstance.getClusterId());
+            if (cluster == null) {
+                return;
+            }
+            String type = cluster.getType();
+            if (!type.equalsIgnoreCase(GatewayType.YARN_APPLICATION.getLongValue())) {
+                return;
+            }
+            String name = cluster.getName();
+            ApplicationId applicationId = ApplicationId.fromString(name);
+            String dir = outputLogs + "/" + applicationId.toString();
+            File fileDir = new File(dir);
+            if (!fileDir.exists()) {
+                fileDir.mkdirs();
+            } else {
+                log.info("The log for this task has been output, Please check {}", dir);
+                return;
+            }
+            String logFilePath = dir + "/" + applicationId + ".log";
+            int exitCode = executeJar(applicationId.toString(), logFilePath);
+            int retry = 1;
+            while (exitCode != 0 && retry <= retryNum) {
+                log.info("An error occurs in the output log task {}. Wait 10 seconds and try again {}", exitCode, retry);
+                TimeUnit.SECONDS.sleep(waitTime);
+                exitCode = executeJar(applicationId.toString(), logFilePath);
+                retry++;
+            }
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
+        }
+    }
+
+    public static int executeJar(String applicationId, String logFilePath) throws IOException, InterruptedException {
+        ProcessBuilder processBuilder = new ProcessBuilder("yarn", "logs", "-applicationId", applicationId);
+        String command = String.join(" ", processBuilder.command());
+        log.info("Executing command: {}", command);
+        Process process = processBuilder.start();
+        InputStream stdout = process.getInputStream();
+        InputStream stderr = process.getErrorStream();
+        File logFile = new File(logFilePath);
+        try (BufferedWriter logWriter = Files.newBufferedWriter(logFile.toPath(), StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
+            // 创建两个线程来分别读取标准输出和标准错误流并写入日志文件
+            Thread outputThread = new Thread(() -> streamToWriter(stdout, logWriter));
+            Thread errorThread = new Thread(() -> streamToWriter(stderr, logWriter));
+
+            // 启动线程
+            outputThread.start();
+            errorThread.start();
+
+            // 等待线程结束
+            outputThread.join();
+            errorThread.join();
+        }
+        return process.waitFor();
+    }
+
+    private static void streamToWriter(InputStream inputStream, BufferedWriter writer) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                writer.write(line);
+                writer.newLine();
+                writer.flush();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     private boolean inRefreshPlan(JobInstance jobInstance) {
@@ -1511,51 +1589,19 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
         taskOperatingResult.parseResult(result);
     }
 
-    public void outPutLogs(JobInstance jobInstance) {
+    @PreDestroy
+    public void shutdown() {
+        executorService.shutdown();
         try {
-            Cluster cluster = clusterService.getById(jobInstance.getClusterId());
-            String type = cluster.getType();
-            if (!type.equalsIgnoreCase(GatewayType.YARN_APPLICATION.getLongValue())) {
-                return;
+            if (!executorService.awaitTermination(60, TimeUnit.SECONDS)) {
+                executorService.shutdownNow();
+                if (!executorService.awaitTermination(60, TimeUnit.SECONDS)) {
+                    System.err.println("ExecutorService did not terminate");
+                }
             }
-            String name = cluster.getName();
-            ApplicationId applicationId = ApplicationId.fromString(name);
-            String dir = outputLogs + "/" + applicationId.toString();
-            Path path = Paths.get(dir);
-            boolean directoryExists = Files.exists(path);
-            if (directoryExists) {
-                log.info("The log for this task has been output, Please check {}", dir);
-                return;
-            }
-            ContainerLogsRequest request = new ContainerLogsRequest();
-            request.setAppId(applicationId);
-            log.info("out put log dir {}", dir);
-            request.setAppOwner(appOwner);
-            request.setOutputLocalDir(dir);
-            Set<String> logs = new HashSet<>();
-            request.setLogTypes(logs);
-            request.setBytes(Long.MAX_VALUE);
-
-            YarnConfiguration yarnConfiguration = new YarnConfiguration();
-
-            GatewayConfig config = GatewayConfig.build(clusterConfigurationService.getClusterConfigById(cluster.getClusterConfigurationId()).getConfig());
-            String yarnConfigPath = config.getClusterConfig().getYarnConfigPath();
-            yarnConfiguration
-                    .addResource(new org.apache.hadoop.fs.Path(URI.create(yarnConfigPath + "/yarn-site.xml")));
-            yarnConfiguration
-                    .addResource(new org.apache.hadoop.fs.Path(URI.create(yarnConfigPath + "/core-site.xml")));
-            yarnConfiguration
-                    .addResource(new org.apache.hadoop.fs.Path(URI.create(yarnConfigPath + "/hdfs-site.xml")));
-            LogCLIHelpers logCLIHelpers = new LogCLIHelpers();
-            logCLIHelpers.setConf(yarnConfiguration);
-            int i = logCLIHelpers.dumpAllContainersLogs(request);
-            if (i == 0) {
-                log.info("{} out put log success.", name);
-            } else {
-                log.info("{} out put log fail.", name);
-            }
-        } catch (Exception e) {
-            log.info(e.getMessage(), e);
+        } catch (InterruptedException ie) {
+            executorService.shutdownNow();
+            Thread.currentThread().interrupt();
         }
     }
 }
