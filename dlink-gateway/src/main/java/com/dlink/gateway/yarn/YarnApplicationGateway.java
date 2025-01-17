@@ -19,6 +19,7 @@
 
 package com.dlink.gateway.yarn;
 
+import cn.hutool.core.io.FileUtil;
 import com.dlink.assertion.Asserts;
 import com.dlink.gateway.GatewayType;
 import com.dlink.gateway.config.AppConfig;
@@ -27,7 +28,6 @@ import com.dlink.gateway.result.GatewayResult;
 import com.dlink.gateway.result.YarnResult;
 import com.dlink.model.SystemConfiguration;
 import com.dlink.utils.LogUtil;
-
 import org.apache.flink.client.deployment.ClusterSpecification;
 import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.client.program.ClusterClient;
@@ -38,16 +38,26 @@ import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.yarn.YarnClientYarnClusterInformationRetriever;
 import org.apache.flink.yarn.YarnClusterDescriptor;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
+import org.apache.hadoop.yarn.api.records.ApplicationAttemptReport;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.ContainerReport;
+import org.apache.hadoop.yarn.client.api.YarnClient;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.apache.hadoop.yarn.exceptions.YarnException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.io.IOException;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
-
-import cn.hutool.core.io.FileUtil;
 
 /**
  * YarnApplicationGateway
@@ -56,6 +66,8 @@ import cn.hutool.core.io.FileUtil;
  * @since 2021/10/29
  **/
 public class YarnApplicationGateway extends YarnGateway {
+
+    private static final Logger logger = LoggerFactory.getLogger(YarnApplicationGateway.class);
 
     public YarnApplicationGateway(GatewayConfig config) {
         super(config);
@@ -130,6 +142,7 @@ public class YarnApplicationGateway extends YarnGateway {
             ApplicationId applicationId = clusterClient.getClusterId();
             result.setAppId(applicationId.toString());
             result.setWebURL(clusterClient.getWebInterfaceURL());
+            saveYarnLog(applicationId);
             result.success();
         } catch (Exception e) {
             result.fail(LogUtil.getError(e));
@@ -137,5 +150,87 @@ public class YarnApplicationGateway extends YarnGateway {
             yarnClusterDescriptor.close();
         }
         return result;
+    }
+
+    public void saveYarnLog(ApplicationId applicationId) throws IOException, YarnException {
+        YarnClient initYarnClient = initYarnClient();
+        List<ApplicationAttemptReport> applicationAttempts = initYarnClient.getApplicationAttempts(applicationId);
+        if (applicationAttempts.isEmpty()) {
+            logger.info("{} is not init containers.", applicationId);
+        } else {
+            ApplicationAttemptId applicationAttemptId = applicationAttempts.get(0).getApplicationAttemptId();
+            try {
+                List<ContainerReport> containers = getContainersWithRetry(initYarnClient, applicationAttemptId);
+                if (containers.isEmpty()) {
+                    logger.info("{} is not get containers.", applicationAttemptId);
+                    return;
+                }
+                logger.info("containers size : {}", containers.size());
+                containers.forEach(containerReport -> {
+                    String logUrl = containerReport.getLogUrl();
+                    String logDir = System.getProperty("kso.output.yarn.logs.dir");
+                    String dir = logDir + "/" + applicationId.toString() + "/" + containerReport.getContainerId().toString();
+                    File logFileDir = new File(dir);
+                    if (!logFileDir.exists() || !logFileDir.isDirectory()) {
+                        boolean mkdirs = logFileDir.mkdirs();
+                        if (mkdirs) {
+                            logger.info("{} dir is create success.", dir);
+                        } else {
+                            logger.info("{} dir is create fail.", dir);
+                        }
+                    }
+                    String filePath = dir + "/" + containerReport.getContainerId().toString() + ".txt";
+                    File file = new File(filePath);
+                    if (!file.exists() || !file.isFile()) {
+                        File logUrlFile = FileUtil.writeUtf8String(logUrl, filePath);
+                        logger.info("create file {}", logUrlFile.getAbsolutePath());
+                    }
+                });
+            } catch (YarnException e) {
+                throw new RuntimeException(e);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    private YarnClient initYarnClient() {
+        YarnConfiguration yarnConfiguration = new YarnConfiguration();
+        yarnConfiguration
+                .addResource(new Path(URI.create(config.getClusterConfig().getYarnConfigPath() + "/yarn-site.xml")));
+        yarnConfiguration
+                .addResource(new Path(URI.create(config.getClusterConfig().getYarnConfigPath() + "/core-site.xml")));
+        yarnConfiguration
+                .addResource(new Path(URI.create(config.getClusterConfig().getYarnConfigPath() + "/hdfs-site.xml")));
+        YarnClient yarnClient = YarnClient.createYarnClient();
+        yarnClient.init(yarnConfiguration);
+        yarnClient.start();
+        return yarnClient;
+    }
+
+    private List<ContainerReport> getContainersWithRetry(YarnClient yarnClient, ApplicationAttemptId applicationAttemptId) throws IOException, YarnException {
+        List<ContainerReport> containers;
+        int retryCount = 0;
+        final int maxRetries = 10; // 最大重试次数
+        final long retryIntervalMillis = 10000; // 重试间隔时间（10秒）
+        do {
+            containers = yarnClient.getContainers(applicationAttemptId);
+            if (containers.size() > 1) {
+                break;
+            }
+            retryCount++;
+            try {
+                Thread.sleep(retryIntervalMillis);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Thread interrupted while waiting for containers", e);
+            }
+        } while (retryCount < maxRetries);
+
+        if (containers.size() <= 1) {
+            throw new RuntimeException("Failed to get more than one container after " + maxRetries + " retries");
+        }
+
+        return containers;
     }
 }

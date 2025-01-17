@@ -43,12 +43,15 @@ import java.time.LocalDateTime;
 
 import org.springframework.context.annotation.DependsOn;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * Job2MysqlHandler
  *
  * @author wenmo
  * @since 2021/6/27 0:04
  */
+@Slf4j
 @DependsOn("springContextUtils")
 public class Job2MysqlHandler implements JobHandler {
 
@@ -89,6 +92,8 @@ public class Job2MysqlHandler implements JobHandler {
         history.setStartTime(job.getStartTime());
         history.setTaskId(job.getJobConfig().getTaskId());
         history.setConfigJson(JSONUtil.toJsonString(job.getJobConfig()));
+        log.info("config Json {}", JSONUtil.toJsonString(job.getJobConfig()));
+        log.info("history is {}", history);
         historyService.save(history);
 
         job.setId(history.getId());

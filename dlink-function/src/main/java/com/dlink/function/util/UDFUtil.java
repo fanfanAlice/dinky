@@ -20,6 +20,7 @@
 package com.dlink.function.util;
 
 import com.dlink.assertion.Asserts;
+import com.dlink.classloader.DinkyClassLoader;
 import com.dlink.config.Dialect;
 import com.dlink.context.DinkyClassLoaderContextHolder;
 import com.dlink.context.JarPathContextHolder;
@@ -293,9 +294,17 @@ public class UDFUtil {
             if (ClassLoaderUtil.isPresent(className)) {
                 // 获取已经加载在java的类，对应的包路径
                 try {
-                    JarPathContextHolder.addUdfPath(
-                            FileUtil.file(DinkyClassLoaderContextHolder.get().loadClass(className).getProtectionDomain()
-                                    .getCodeSource().getLocation().getPath()));
+                    DinkyClassLoader dinkyClassLoader = DinkyClassLoaderContextHolder.get();
+                    if (null == dinkyClassLoader) {
+                        JarPathContextHolder.addUdfPath(
+                                FileUtil.file(Class.forName(className).getProtectionDomain()
+                                        .getCodeSource().getLocation().getPath()));
+                    } else {
+                        JarPathContextHolder.addUdfPath(
+                                FileUtil.file(
+                                        DinkyClassLoaderContextHolder.get().loadClass(className).getProtectionDomain()
+                                                .getCodeSource().getLocation().getPath()));
+                    }
                 } catch (ClassNotFoundException e) {
                     throw new DinkyException(e);
                 }

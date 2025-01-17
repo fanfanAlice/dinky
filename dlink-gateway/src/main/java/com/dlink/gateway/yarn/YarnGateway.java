@@ -92,6 +92,7 @@ public abstract class YarnGateway extends AbstractGateway {
         super(config);
     }
 
+    @Override
     public void init() {
         initConfig();
         initYarnClient();
@@ -127,7 +128,7 @@ public abstract class YarnGateway extends AbstractGateway {
             }
         }
         if (getType().isApplicationMode()) {
-            configuration.set(YarnConfigOptions.APPLICATION_TYPE, "Dinky Flink");
+            configuration.set(YarnConfigOptions.APPLICATION_TYPE, "KSO Flink");
             String uuid = UUID.randomUUID().toString().replace("-", "");
             if (configuration.contains(CheckpointingOptions.CHECKPOINTS_DIRECTORY)) {
                 configuration.set(CheckpointingOptions.CHECKPOINTS_DIRECTORY,
@@ -164,10 +165,12 @@ public abstract class YarnGateway extends AbstractGateway {
         }
     }
 
+    @Override
     public SavePointResult savepointCluster() {
         return savepointCluster(null);
     }
 
+    @Override
     public SavePointResult savepointCluster(String savePoint) {
         if (Asserts.isNull(yarnClient)) {
             init();
@@ -208,10 +211,12 @@ public abstract class YarnGateway extends AbstractGateway {
         return result;
     }
 
+    @Override
     public SavePointResult savepointJob() {
         return savepointJob(null);
     }
 
+    @Override
     public SavePointResult savepointJob(String savePoint) {
         if (Asserts.isNull(yarnClient)) {
             init();
@@ -292,6 +297,7 @@ public abstract class YarnGateway extends AbstractGateway {
         });
     }
 
+    @Override
     public TestResult test() {
         try {
             initConfig();

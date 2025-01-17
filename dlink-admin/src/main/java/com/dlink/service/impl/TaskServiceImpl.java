@@ -23,6 +23,7 @@ import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.convert.Convert;
+import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.lang.tree.Tree;
 import cn.hutool.core.lang.tree.TreeNode;
 import cn.hutool.core.lang.tree.TreeUtil;
@@ -136,23 +137,20 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.annotation.PreDestroy;
 import javax.annotation.Resource;
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.StandardOpenOption;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -216,12 +214,8 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
     private String serverPort;
     @Value("${spring.datasource.public-key:}")
     private String publicKey;
-    @Value("${kso.output.yarn.logs.dir:/tmp/kso/logs}")
-    private String outputLogs;
-    @Value("${kso.output.retry.num:5}")
-    private Integer retryNum;
-    @Value("${kso.output.retry.wait.seconds:10}")
-    private Integer waitTime;
+    @Value("${kso.auth.command}")
+    private String authCommand;
 
     @Autowired
     private UDFService udfService;
@@ -233,7 +227,8 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
     }
 
     private String buildParas(Integer id, String dinkyAddr) {
-        return "--id " + id + " --driver " + driver + " --url " + url + " --username " + username + " --password " + decryptByPublicKey(password, publicKey) + " --dinkyAddr " + dinkyAddr;
+        return "--id " + id + " --driver " + driver + " --url " + url + " --username " + username + " --password "
+                + decryptByPublicKey(password, publicKey) + " --dinkyAddr " + dinkyAddr;
     }
 
     public static String decryptByPublicKey(String encryptedPassword, String publicKey) {
@@ -943,6 +938,7 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
                     gatewayConfig.put("userJarPath", systemConfiguration.getSqlSubmitJarPath());
                     gatewayConfig.put("userJarParas",
                             systemConfiguration.getSqlSubmitJarParas() + buildParas(config.getTaskId()));
+                    log.info("get userJarParas {}", gatewayConfig.get("userJarParas"));
                     gatewayConfig.put("userJarMainAppClass", systemConfiguration.getSqlSubmitJarMainAppClass());
                 } else {
                     Jar jar = jarService.getById(task.getJarId());
@@ -1071,63 +1067,87 @@ public class TaskServiceImpl extends SuperServiceImpl<TaskMapper, Task> implemen
             }
             String name = cluster.getName();
             ApplicationId applicationId = ApplicationId.fromString(name);
+            String outputLogs = System.getProperty("kso.output.yarn.logs.dir");
             String dir = outputLogs + "/" + applicationId.toString();
-            File fileDir = new File(dir);
-            if (!fileDir.exists()) {
-                fileDir.mkdirs();
+            File file = new File(dir);
+            if (file.exists() && file.isDirectory()) {
+                File[] files = file.listFiles();
+                if (files == null || files.length == 0) {
+                    log.info("{} dir not have containerDir", dir);
+                    return;
+                }
+                for (File containerDir : files) {
+                    if (containerDir.exists() && containerDir.isDirectory()) {
+                        File[] listFiles = containerDir.listFiles();
+                        if (listFiles == null || listFiles.length == 0) {
+                            log.info("{} dir not have container URL file", containerDir.getAbsolutePath());
+                            return;
+                        }
+                        long count = Arrays.stream(listFiles).filter(x -> x.getName().contains("taskmanager") || x.getName().contains("jobmanager")).count();
+                        if (count > 0) {
+                            log.info("{} dir file has been written", dir);
+                            return;
+                        }
+                        runCommand(authCommand.split(" "));
+                        for (File containerFile : listFiles) {
+                            if (containerFile.exists() && containerFile.isFile()) {
+                                String containerUrl = FileUtil.readUtf8String(containerFile);
+                                String response = runUrlCommand(containerUrl);
+                                String[] split = response.split("\n");
+                                String content = split[split.length - 1].replaceAll("\"", "");
+                                if (!content.contains("Redirecting")) {
+                                    return;
+                                }
+                                String redirectURL = content.substring(content.indexOf("http"));
+                                log.info("Container URL redirect {}", redirectURL);
+                                String data = runUrlCommand(redirectURL);
+                                String logFilePath = containerFile.getAbsolutePath();
+                                if (data.contains("Log Type: taskmanager.log")) {
+                                    data = runUrlCommand(redirectURL + "/taskmanager.log/?start=0");
+                                    logFilePath = containerFile.getParent() + "/" + "taskmanager.log";
+                                } else if (data.contains("Log Type: jobmanager.log")) {
+                                    data = runUrlCommand(redirectURL + "/jobmanager.log/?start=0");
+                                    logFilePath = containerFile.getParent() + "/" + "jobmanager.log";
+                                }
+                                FileUtil.writeUtf8String(data, logFilePath);
+                            }
+                        }
+                    }
+                }
             } else {
-                log.info("The log for this task has been output, Please check {}", dir);
-                return;
-            }
-            String logFilePath = dir + "/" + applicationId + ".log";
-            int exitCode = executeJar(applicationId.toString(), logFilePath);
-            int retry = 1;
-            while (exitCode != 0 && retry <= retryNum) {
-                log.info("An error occurs in the output log task {}. Wait 10 seconds and try again {}", exitCode, retry);
-                TimeUnit.SECONDS.sleep(waitTime);
-                exitCode = executeJar(applicationId.toString(), logFilePath);
-                retry++;
+                log.info("{} dir is not exits", dir);
             }
         } catch (Exception e) {
             log.error(e.getMessage(), e);
         }
     }
 
-    public static int executeJar(String applicationId, String logFilePath) throws IOException, InterruptedException {
-        ProcessBuilder processBuilder = new ProcessBuilder("yarn", "logs", "-applicationId", applicationId);
-        String command = String.join(" ", processBuilder.command());
-        log.info("Executing command: {}", command);
-        Process process = processBuilder.start();
-        InputStream stdout = process.getInputStream();
-        InputStream stderr = process.getErrorStream();
-        File logFile = new File(logFilePath);
-        try (BufferedWriter logWriter = Files.newBufferedWriter(logFile.toPath(), StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
-            // 创建两个线程来分别读取标准输出和标准错误流并写入日志文件
-            Thread outputThread = new Thread(() -> streamToWriter(stdout, logWriter));
-            Thread errorThread = new Thread(() -> streamToWriter(stderr, logWriter));
-
-            // 启动线程
-            outputThread.start();
-            errorThread.start();
-
-            // 等待线程结束
-            outputThread.join();
-            errorThread.join();
-        }
-        return process.waitFor();
+    public static String runUrlCommand(String url) {
+        String[] command = {"curl", "-k", "-i", "--negotiate", "-u", ":", url};
+        return runCommand(command);
     }
 
-    private static void streamToWriter(InputStream inputStream, BufferedWriter writer) {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
+    public static String runCommand(String[] command) {
+        StringBuilder output = new StringBuilder();
+        // 使用 ProcessBuilder 执行命令
+        ProcessBuilder processBuilder = new ProcessBuilder(command);
+        processBuilder.redirectErrorStream(true); // 合并输出流和错误流
+
+        try {
+            Process process = processBuilder.start(); // 启动进程
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+
             String line;
             while ((line = reader.readLine()) != null) {
-                writer.write(line);
-                writer.newLine();
-                writer.flush();
+                output.append(line).append("\n");
             }
-        } catch (IOException e) {
+
+            // 等待进程结束
+            int exitCode = process.waitFor();
+        } catch (IOException | InterruptedException e) {
             e.printStackTrace();
         }
+        return output.toString();
     }
 
     private boolean inRefreshPlan(JobInstance jobInstance) {

@@ -57,7 +57,7 @@ start() {
 
   pid=$(cat ${PIDPATH}/${PIDFILE})
   if [ -z $pid ]; then
-    nohup java -Ddruid.mysql.usePingMethod=false -Xms512M -Xmx2048M -XX:PermSize=512M -XX:MaxPermSize=1024M -XX:+HeapDumpOnOutOfMemoryError -Xverify:none -cp ${CLASS_PATH} com.dlink.Dlink >/dev/null 2>&1 &
+    nohup java -Ddruid.mysql.usePingMethod=false -Dkso.output.yarn.logs.dir=/tmp -Xms512M -Xmx2048M -XX:PermSize=512M -XX:MaxPermSize=1024M -XX:+HeapDumpOnOutOfMemoryError -Xverify:none -cp ${CLASS_PATH} com.dlink.Dlink >/dev/null 2>&1 &
     echo $! >${PIDPATH}/${PIDFILE}
     echo "FLINK VERSION : $FLINK_VERSION"
     echo "........................................Start Dinky Successfully........................................"
@@ -105,7 +105,7 @@ restart() {
 }
 
 runTool() {
-    java -Ddruid.mysql.usePingMethod=false -Xms512M -Xmx2048M -XX:PermSize=512M -XX:MaxPermSize=1024M -XX:+HeapDumpOnOutOfMemoryError -Xverify:none -cp ${CLASS_PATH} "$@"
+    java -Ddruid.mysql.usePingMethod=false -Dkso.output.yarn.logs.dir=/tmp -Xms512M -Xmx2048M -XX:PermSize=512M -XX:MaxPermSize=1024M -XX:+HeapDumpOnOutOfMemoryError -Xverify:none -cp ${CLASS_PATH} "$@"
     exit $?
 }
 # 根据输入参数执行对应方法，不输入则执行tips提示方法
